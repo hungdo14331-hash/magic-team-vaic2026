@@ -17,7 +17,8 @@ def call_fpt_model(system_prompt: str, user_message: str, temperature: float = 0
 
     headers = {
         "Authorization": f"Bearer {FPT_API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     }
     payload = {
         "model": FPT_MODEL_NAME,
@@ -37,7 +38,6 @@ def call_fpt_model(system_prompt: str, user_message: str, temperature: float = 0
         message = data["choices"][0]["message"]
         content = message.get("content")
 
-        # GLM-5.2 là model reasoning: đôi khi trả lời thật nằm trong reasoning_content
         if not content:
             content = message.get("reasoning_content")
 
