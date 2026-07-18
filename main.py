@@ -78,17 +78,14 @@ with tab_compare:
 with tab_dashboard:
     st.subheader("📊 Agent Trace Dashboard — Nhật ký xử lý gần nhất")
     log = orchestrator_module.LAST_RUN_LOG
-
     if not log["user_input"]:
         st.info("Chưa có câu hỏi nào được xử lý. Hãy đặt câu hỏi ở tab Chat trước.")
     else:
         st.markdown(f"**Yêu cầu:** {log['user_input']}")
-
         col1, col2, col3 = st.columns(3)
         col1.metric("Số Expert được gọi", len(log["experts_called"]))
         col2.metric("Số lượt gọi Tool", len(log["tool_calls"]))
         col3.metric("Cảnh báo rủi ro", "Có ⚠️" if log["risk_flagged"] else "Không")
-
         st.divider()
         st.markdown("### 🔀 Collaboration Flow")
         flow_text = "**Planner (Fast Routing)** → "
@@ -98,6 +95,22 @@ with tab_dashboard:
         else:
             flow_text += " → Kết quả cuối (bỏ qua Synthesis vì chỉ 1 Expert)"
         st.markdown(flow_text)
+
+        st.divider()
+        st.markdown("### 🧠 Case Memory — State hiện tại")
+        mem = log.get("memory_state", {})
+        if mem:
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Hồ sơ đang xử lý", mem.get("customer_id", "—"))
+            c2.metric("Dữ liệu đã cache", mem.get("cached_tools", 0))
+            c3.metric("Lượt trao đổi", mem.get("history_length", 0))
+            if mem.get("facts"):
+                st.markdown("**Dữ kiện đã xác lập trong phiên:**")
+                for k, v in mem["facts"].items():
+                    label = {"loan_amount": "Số tiền vay", "income_monthly": "Thu nhập/tháng"}.get(k, k)
+                    st.markdown(f"- {label}: `{v:,} VNĐ`")
+            if mem.get("experts_consulted"):
+                st.markdown(f"**Chuyên gia đã tham gia case:** {', '.join(e.capitalize() for e in mem['experts_consulted'])}")
 
         st.divider()
         st.markdown("### 🔧 Task Status — Tool Calls")

@@ -33,6 +33,8 @@ Quy tắc quan trọng:
 Đầu ra:
 - Kết luận đủ/chưa đủ điều kiện, kèm số liệu cụ thể.
 - Đề xuất điều chỉnh nếu chưa đủ điều kiện (giảm số tiền vay, kéo dài kỳ hạn, bổ sung tài sản đảm bảo).
+
+QUAN TRỌNG VỀ ĐỊNH DẠNG: Chỉ trả lời bằng kết luận và số liệu cuối cùng. TUYỆT ĐỐI KHÔNG hiển thị quá trình suy nghĩ từng bước, không viết bằng tiếng Anh, không liệt kê nhiều giả định rồi tự sửa lại giữa chừng. Nếu cần giả định (VD: lãi suất, kỳ hạn), chỉ nêu NGẮN GỌN 1 dòng giả định rồi đưa thẳng kết quả.
 """
 
 LEGAL_COMPLIANCE_EXPERT_PROMPT = """
@@ -52,6 +54,8 @@ Quy tắc quan trọng:
 Đầu ra:
 - Kết luận: hồ sơ có đáp ứng yêu cầu tuân thủ hay không, còn thiếu gì.
 - Danh sách giấy tờ/thủ tục KYC cần bổ sung nếu có.
+
+QUAN TRỌNG VỀ ĐỊNH DẠNG: Chỉ trả lời bằng kết luận và số liệu cuối cùng. TUYỆT ĐỐI KHÔNG hiển thị quá trình suy nghĩ từng bước, không viết bằng tiếng Anh, không liệt kê nhiều giả định rồi tự sửa lại giữa chừng. Nếu cần giả định (VD: lãi suất, kỳ hạn), chỉ nêu NGẮN GỌN 1 dòng giả định rồi đưa thẳng kết quả.
 """
 
 PRODUCT_EXPERT_PROMPT = """
@@ -69,6 +73,8 @@ Quy tắc quan trọng:
 Đầu ra:
 - Gói sản phẩm đề xuất, kèm lý do phù hợp.
 - Gợi ý cross-sell hợp lý (nếu có), giải thích lợi ích cho khách hàng.
+
+QUAN TRỌNG VỀ ĐỊNH DẠNG: Chỉ trả lời bằng kết luận và số liệu cuối cùng. TUYỆT ĐỐI KHÔNG hiển thị quá trình suy nghĩ từng bước, không viết bằng tiếng Anh, không liệt kê nhiều giả định rồi tự sửa lại giữa chừng. Nếu cần giả định (VD: lãi suất, kỳ hạn), chỉ nêu NGẮN GỌN 1 dòng giả định rồi đưa thẳng kết quả.
 """
 
 OPERATIONS_EXPERT_PROMPT = """
@@ -86,4 +92,6 @@ Quy tắc quan trọng:
 Đầu ra:
 - Luồng phê duyệt đề xuất (ai duyệt, cấp nào).
 - Danh sách bước/giấy tờ cần thiết, thời gian dự kiến.
+
+QUAN TRỌNG VỀ ĐỊNH DẠNG: Chỉ trả lời bằng kết luận và số liệu cuối cùng. TUYỆT ĐỐI KHÔNG hiển thị quá trình suy nghĩ từng bước, không viết bằng tiếng Anh, không liệt kê nhiều giả định rồi tự sửa lại giữa chừng. Nếu cần giả định (VD: lãi suất, kỳ hạn), chỉ nêu NGẮN GỌN 1 dòng giả định rồi đưa thẳng kết quả.
 """
