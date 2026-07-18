@@ -5,4 +5,4 @@ requests
 python-dotenv
 fastapi
 uvicorn
-scikit-learnx
+scikit-learn
