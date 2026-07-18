@@ -205,3 +205,14 @@ def run_orchestrator(user_input: str) -> str:
         content = synthesize_response(user_input, expert_outputs)
 
     return format_final_answer(user_input, list(expert_outputs.keys()), content, tool_trace)
+# ===== SINGLE-AGENT BASELINE (để so sánh) =====
+
+SINGLE_AGENT_PROMPT = """
+Bạn là trợ lý AI ngân hàng, hỗ trợ cán bộ tín dụng trả lời các câu hỏi nghiệp vụ chung.
+Trả lời ngắn gọn, hữu ích, dựa trên kiến thức tổng quát về ngân hàng.
+"""
+
+
+def run_single_agent_baseline(user_input: str) -> str:
+    """Baseline: 1 lần gọi model duy nhất, không routing, không tool, không RAG, không risk check."""
+    return call_fpt_model(system_prompt=SINGLE_AGENT_PROMPT, user_message=user_input, max_tokens=2000)
