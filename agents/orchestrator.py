@@ -728,5 +728,5 @@ def run_single_agent_baseline(user_input: str) -> str:
     return call_fpt_model(
         system_prompt=SINGLE_AGENT_PROMPT,
         user_message=user_input,
-        max_tokens=2000,
+        max_tokens=4000,
     )
