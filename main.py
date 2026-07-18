@@ -88,6 +88,7 @@ with tab_dashboard:
         col3.metric("Cảnh báo rủi ro", "Có ⚠️" if log["risk_flagged"] else "Không")
         st.divider()
         st.markdown("### 🔀 Collaboration Flow")
+        
         flow_text = "**Planner (Fast Routing)** → "
         flow_text += " + ".join([f"**{e.capitalize()} Expert**" for e in log["experts_called"]])
         if log["synthesis_used"]:
@@ -95,7 +96,11 @@ with tab_dashboard:
         else:
             flow_text += " → Kết quả cuối (bỏ qua Synthesis vì chỉ 1 Expert)"
         st.markdown(flow_text)
-
+        if log.get("task_plan") and len(log["experts_called"]) > 1:
+            st.markdown("**📋 Task Decomposition (Planner đã giao việc):**")
+            name_map = {"credit": "Credit Expert", "legal": "Legal & Compliance Expert", "product": "Product Expert", "operations": "Operations Expert"}
+            for expert, task in log["task_plan"].items():
+                st.markdown(f"- **{name_map.get(expert, expert)}**: {task}")
         st.divider()
         st.markdown("### 🧠 Case Memory — State hiện tại")
         mem = log.get("memory_state", {})

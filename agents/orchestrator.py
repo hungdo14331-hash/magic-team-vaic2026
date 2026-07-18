@@ -1,4 +1,4 @@
-# agents/orchestrator.py
+﻿# agents/orchestrator.py
 import concurrent.futures
 import json
 import re
@@ -26,18 +26,10 @@ from tools.banking_tools import (
 )
 from prompts.system_prompts import (
     ORCHESTRATOR_PROMPT,
-    CREDIT_EXPERT_PROMPT,
-    LEGAL_COMPLIANCE_EXPERT_PROMPT,
-    PRODUCT_EXPERT_PROMPT,
-    OPERATIONS_EXPERT_PROMPT,
+    SYSTEM_PROMPTS,
 )
 
-EXPERT_PROMPTS = {
-    "credit": CREDIT_EXPERT_PROMPT,
-    "legal": LEGAL_COMPLIANCE_EXPERT_PROMPT,
-    "product": PRODUCT_EXPERT_PROMPT,
-    "operations": OPERATIONS_EXPERT_PROMPT,
-}
+EXPERT_PROMPTS = SYSTEM_PROMPTS
 
 ROUTING_KEYWORDS = {
     "credit": ["vay", "tín dụng", "hồ sơ vay", "trả nợ", "cic", "điểm tín dụng", "dti", "hạn mức", "nợ xấu"],
@@ -75,6 +67,42 @@ def decide_experts_fast(user_input: str) -> list:
     matched = [expert for expert, keywords in ROUTING_KEYWORDS.items() if any(kw in lowered for kw in keywords)]
     return matched if matched else list(EXPERT_PROMPTS.keys())
 
+def planner_decompose(user_input: str, experts_to_call: list) -> dict:
+    """
+    Planner Agent thật: viết ra sub-task cụ thể cho từng Expert đã được chọn,
+    thay vì để mỗi Expert tự suy đoán phải làm gì từ câu hỏi gốc.
+    Nếu model lỗi/timeout, fallback về sub-task mặc định (không bao giờ crash demo).
+    """
+    if len(experts_to_call) <= 1:
+        # Không cần phân rã nếu chỉ 1 Expert — sub-task = câu hỏi gốc
+        return {e: user_input for e in experts_to_call}
+
+    expert_names_str = ", ".join(experts_to_call)
+    planner_prompt = f"""
+Bạn là Planner Agent. Yêu cầu của cán bộ: "{user_input}"
+
+Các Expert sẽ tham gia: {expert_names_str}
+
+Với MỖI Expert, hãy viết 1 câu mô tả CHÍNH XÁC nhiệm vụ của Expert đó cần làm cho yêu cầu này
+(không phải lặp lại nguyên văn câu hỏi — hãy phân rã theo đúng chuyên môn riêng).
+
+Trả lời DUY NHẤT bằng JSON dạng object, không giải thích:
+{{"credit": "nhiệm vụ cụ thể...", "legal": "nhiệm vụ cụ thể...", ...}}
+(chỉ liệt kê đúng các Expert trong danh sách: {expert_names_str})
+"""
+    response = call_fpt_model(
+        system_prompt="Bạn chỉ trả JSON, không giải thích gì thêm.",
+        user_message=planner_prompt,
+        max_tokens=600,
+    )
+    try:
+        json_match = re.search(r"\{.*\}", response, re.DOTALL)
+        plan = json.loads(json_match.group(0)) if json_match else {}
+        # Đảm bảo đủ sub-task cho mọi Expert, fallback nếu Planner bỏ sót
+        return {e: plan.get(e, user_input) for e in experts_to_call}
+    except Exception:
+        # Fallback an toàn: mỗi Expert nhận nguyên câu hỏi gốc — demo không bao giờ crash
+        return {e: user_input for e in experts_to_call}
 
 def extract_customer_id(text: str) -> str:
     """Tìm mã khách hàng dạng KH001, KH002... trong câu hỏi."""
@@ -168,11 +196,12 @@ def call_expert(expert_name: str, user_input: str) -> dict:
     text = call_fpt_model(system_prompt=system_prompt, user_message=enriched_input, max_tokens=2000)
     CASE_MEMORY.experts_consulted.add(expert_name)
     return {"text": text, "tool_calls": tool_results}
-def call_experts_parallel(expert_names: list, user_input: str) -> dict:
+def call_experts_parallel(expert_names: list, task_plan: dict) -> dict:
+    """Gọi nhiều Expert CÙNG LÚC, mỗi Expert nhận đúng sub-task Planner đã giao."""
     results = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(expert_names), 1)) as executor:
         future_to_expert = {
-            executor.submit(call_expert, name, user_input): name
+            executor.submit(call_expert, name, task_plan.get(name, "")): name
             for name in expert_names
         }
         for future in concurrent.futures.as_completed(future_to_expert):
@@ -238,9 +267,10 @@ def run_orchestrator(user_input: str) -> str:
     CASE_MEMORY.add_message("Cán bộ", user_input)
 
     experts_to_call = decide_experts_fast(user_input)
+    task_plan = planner_decompose(user_input, experts_to_call)
     t_routing = time_module.time()
 
-    expert_outputs = call_experts_parallel(experts_to_call, user_input)
+    expert_outputs = call_experts_parallel(experts_to_call, task_plan)
     t_experts = time_module.time()
 
     tool_trace = format_tool_trace(expert_outputs)
@@ -264,6 +294,7 @@ def run_orchestrator(user_input: str) -> str:
     LAST_RUN_LOG = {
         "user_input": user_input,
         "experts_called": list(expert_outputs.keys()),
+        "task_plan": task_plan,
         "tool_calls": all_tool_calls,
         "synthesis_used": synthesis_used,
         "risk_flagged": is_risk,
