@@ -2,14 +2,19 @@
 import streamlit as st
 import time
 from agents.orchestrator import run_orchestrator, run_single_agent_baseline
+import agents.orchestrator as orchestrator_module
+from agents.orchestrator import run_orchestrator, run_single_agent_baseline
 
 st.set_page_config(page_title="SHB Digital Expert Agents", page_icon="🏦", layout="wide")
 
 st.title("🏦 SHB Digital Expert Agents")
 st.caption("Hội đồng chuyên gia số cho Nghiệp vụ Ngân hàng — VAIC 2026")
 
-tab_chat, tab_compare = st.tabs(["💬 Chat với Đội ngũ Expert", "⚖️ So sánh Multi-Agent vs Single-Agent"])
-
+tab_chat, tab_compare, tab_dashboard = st.tabs([
+    "💬 Chat với Đội ngũ Expert",
+    "⚖️ So sánh Multi-Agent vs Single-Agent",
+    "📊 Agent Trace Dashboard",
+])
 with tab_chat:
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -69,4 +74,45 @@ with tab_compare:
         nhưng đổi lại có: căn cứ số liệu thật (CIC, DTI tính toán), trích dẫn quy định nội bộ,
         cảnh báo rủi ro tự động, và truy vết được quyết định — quan trọng hơn tốc độ trong bối cảnh
         nghiệp vụ ngân hàng, nơi 1 quyết định sai có chi phí cao hơn nhiều so với vài giây chờ đợi.
+        """)
+with tab_dashboard:
+    st.subheader("📊 Agent Trace Dashboard — Nhật ký xử lý gần nhất")
+    log = orchestrator_module.LAST_RUN_LOG
+
+    if not log["user_input"]:
+        st.info("Chưa có câu hỏi nào được xử lý. Hãy đặt câu hỏi ở tab Chat trước.")
+    else:
+        st.markdown(f"**Yêu cầu:** {log['user_input']}")
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Số Expert được gọi", len(log["experts_called"]))
+        col2.metric("Số lượt gọi Tool", len(log["tool_calls"]))
+        col3.metric("Cảnh báo rủi ro", "Có ⚠️" if log["risk_flagged"] else "Không")
+
+        st.divider()
+        st.markdown("### 🔀 Collaboration Flow")
+        flow_text = "**Planner (Fast Routing)** → "
+        flow_text += " + ".join([f"**{e.capitalize()} Expert**" for e in log["experts_called"]])
+        if log["synthesis_used"]:
+            flow_text += " → **Synthesis Agent** → Kết quả cuối"
+        else:
+            flow_text += " → Kết quả cuối (bỏ qua Synthesis vì chỉ 1 Expert)"
+        st.markdown(flow_text)
+
+        st.divider()
+        st.markdown("### 🔧 Task Status — Tool Calls")
+        if log["tool_calls"]:
+            for call in log["tool_calls"]:
+                st.markdown(f"- **{call['expert'].capitalize()} Expert** gọi `{call['tool']}({call['args']})` → `{call['result']}`")
+        else:
+            st.markdown("_Không có tool nào được gọi cho yêu cầu này._")
+
+        st.divider()
+        st.markdown("### ⏱️ Timing Breakdown")
+        t = log["timings"]
+        st.markdown(f"""
+        - Routing (chọn Expert): **{t['routing_sec']}s**
+        - Gọi Expert song song (+ tool): **{t['experts_sec']}s**
+        - Synthesis (tổng hợp): **{t['synthesis_sec']}s**
+        - **Tổng thời gian: {t['total_sec']}s**
         """)

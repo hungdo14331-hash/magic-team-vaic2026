@@ -2,6 +2,16 @@
 import concurrent.futures
 import json
 import re
+import time as time_module
+
+# Biến toàn cục lưu lại log của lần chạy gần nhất — dùng cho Dashboard
+LAST_RUN_LOG = {
+    "user_input": "",
+    "experts_called": [],
+    "tool_calls": [],
+    "timings": {},
+    "risk_flagged": False,
+}
 from tools.fpt_inference import call_fpt_model
 from tools.banking_tools import (
     check_credit_score,
@@ -195,17 +205,48 @@ Kết thúc bằng: "Khuyến nghị này cần cán bộ có thẩm quyền xem
 
 
 def run_orchestrator(user_input: str) -> str:
+    global LAST_RUN_LOG
+    t_start = time_module.time()
+
     experts_to_call = decide_experts_fast(user_input)
+    t_routing = time_module.time()
+
     expert_outputs = call_experts_parallel(experts_to_call, user_input)
+    t_experts = time_module.time()
+
     tool_trace = format_tool_trace(expert_outputs)
 
     if len(expert_outputs) == 1:
         content = list(expert_outputs.values())[0]["text"] + "\n\nKhuyến nghị này cần cán bộ có thẩm quyền xem xét và phê duyệt cuối cùng."
+        synthesis_used = False
     else:
         content = synthesize_response(user_input, expert_outputs)
+        synthesis_used = True
+    t_end = time_module.time()
 
-    return format_final_answer(user_input, list(expert_outputs.keys()), content, tool_trace)
-# ===== SINGLE-AGENT BASELINE (để so sánh) =====
+    is_risk = contains_risk(user_input) or contains_risk(content)
+
+    # Ghi lại toàn bộ nhật ký cho Dashboard
+    all_tool_calls = []
+    for expert, data in expert_outputs.items():
+        for call in data.get("tool_calls", []):
+            all_tool_calls.append({"expert": expert, **call})
+
+    LAST_RUN_LOG = {
+        "user_input": user_input,
+        "experts_called": list(expert_outputs.keys()),
+        "tool_calls": all_tool_calls,
+        "synthesis_used": synthesis_used,
+        "risk_flagged": is_risk,
+        "timings": {
+            "routing_sec": round(t_routing - t_start, 2),
+            "experts_sec": round(t_experts - t_routing, 2),
+            "synthesis_sec": round(t_end - t_experts, 2) if synthesis_used else 0,
+            "total_sec": round(t_end - t_start, 2),
+        },
+    }
+
+    return format_final_answer(user_input, list(expert_outputs.keys()), content, tool_trace)# ===== SINGLE-AGENT BASELINE (để so sánh) =====
 
 SINGLE_AGENT_PROMPT = """
 Bạn là trợ lý AI ngân hàng, hỗ trợ cán bộ tín dụng trả lời các câu hỏi nghiệp vụ chung.
