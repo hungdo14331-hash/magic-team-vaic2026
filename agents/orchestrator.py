@@ -1,4 +1,12 @@
 # agents/orchestrator.py
+"""
+BẢN VÁ: thêm 2 tham số use_rag và use_risk_check vào run_orchestrator(), cho
+phép Frontend bật/tắt RAG và Risk Warning THẬT theo từng request (không dùng
+biến global, an toàn khi nhiều người demo cùng lúc).
+
+Thay thế toàn bộ nội dung file agents/orchestrator.py hiện tại bằng file này.
+"""
+
 from __future__ import annotations
 
 import concurrent.futures
@@ -22,7 +30,7 @@ from tools.memory import CaseMemory
 # Case Memory toàn cục — một phiên làm việc.
 CASE_MEMORY = CaseMemory()
 
-# Log lần chạy gần nhất — main.py dùng cho Agent Trace Dashboard.
+# Log lần chạy gần nhất — main.py / api.py dùng cho Agent Trace Dashboard.
 LAST_RUN_LOG: dict[str, Any] = {
     "user_input": "",
     "experts_called": [],
@@ -32,6 +40,7 @@ LAST_RUN_LOG: dict[str, Any] = {
     "timings": {},
     "risk_flagged": False,
     "memory_state": {},
+    "settings_used": {"use_rag": True, "use_risk_check": True},
 }
 
 EXPERT_PROMPTS = SYSTEM_PROMPTS
@@ -240,12 +249,16 @@ def _deduplicate_tool_calls(tool_calls: list[dict[str, Any]]) -> list[dict[str, 
     return result
 
 
-def decide_tool_calls(expert_name: str, user_input: str) -> list[dict[str, Any]]:
+def decide_tool_calls(
+    expert_name: str,
+    user_input: str,
+    use_rag: bool = True,
+) -> list[dict[str, Any]]:
     """
     Quyết định tool theo luật ổn định.
 
-    Điểm quan trọng: query_policy luôn được gọi cho mọi Banking Expert. Vì vậy
-    RAG không còn phụ thuộc vào việc model có trả đúng JSON hay không.
+    use_rag=False: bỏ qua hoàn toàn tool query_policy (tắt RAG), Expert sẽ trả
+    lời chỉ dựa trên kiến thức tổng quát của model, không có trích dẫn nguồn.
     """
     available_tools = EXPERT_TOOLS.get(expert_name, [])
     if not available_tools:
@@ -253,8 +266,8 @@ def decide_tool_calls(expert_name: str, user_input: str) -> list[dict[str, Any]]
 
     tool_calls: list[dict[str, Any]] = []
 
-    # RAG bắt buộc cho mọi Expert, dùng nguyên sub-task làm truy vấn.
-    if "query_policy" in available_tools:
+    # RAG chỉ được gọi khi use_rag=True.
+    if use_rag and "query_policy" in available_tools:
         tool_calls.append(
             {
                 "tool": "query_policy",
@@ -446,8 +459,12 @@ def _format_tool_context(tool_results: list[dict[str, Any]]) -> str:
     return "\n\n".join(blocks)
 
 
-def call_expert(expert_name: str, user_input: str) -> dict[str, Any]:
-    """Gọi một Expert: memory → tool/RAG → khuyến nghị có căn cứ."""
+def call_expert(
+    expert_name: str,
+    user_input: str,
+    use_rag: bool = True,
+) -> dict[str, Any]:
+    """Gọi một Expert: memory → tool/RAG (nếu bật) → khuyến nghị có căn cứ."""
     system_prompt = EXPERT_PROMPTS.get(expert_name)
     if not system_prompt:
         return {
@@ -458,9 +475,24 @@ def call_expert(expert_name: str, user_input: str) -> dict[str, Any]:
     memory_context = CASE_MEMORY.build_context_prefix()
     contextualized_input = f"{memory_context}{user_input}"
 
-    tool_calls = decide_tool_calls(expert_name, user_input)
+    tool_calls = decide_tool_calls(expert_name, user_input, use_rag=use_rag)
     tool_results = execute_tool_calls(tool_calls, user_input, expert_name)
     tool_context = _format_tool_context(tool_results)
+
+    rag_rule = (
+        """1. Dữ liệu từ query_policy và các tool là nguồn sự thật ưu tiên.
+2. Không tự tạo lãi suất, DTI/LTV tối đa, ngưỡng KYC/AML, điều luật, SLA hoặc
+   cấp phê duyệt không xuất hiện trong dữ liệu tool.
+3. Khi dữ liệu tool và kiến thức tổng quát mâu thuẫn, phải dùng dữ liệu tool.
+4. Nếu kho kiến thức chưa có thông tin, ghi rõ "Chưa có thông tin trong kho kiến thức".
+5. Khi dùng RAG, ghi nguồn theo dạng: Tên file — Tên mục."""
+        if use_rag
+        else """1. RAG (tra cứu kho kiến thức nội bộ) đang TẮT cho yêu cầu này.
+2. Trả lời dựa trên kiến thức tổng quát về nghiệp vụ ngân hàng, không trích
+   dẫn file/mục cụ thể vì không có dữ liệu tra cứu.
+3. Ghi rõ ở đầu câu trả lời: "Lưu ý: câu trả lời này KHÔNG tra cứu quy định
+   nội bộ (RAG đang tắt), chỉ mang tính tham khảo chung."."""
+    )
 
     enriched_input = f"""
 {contextualized_input}
@@ -469,12 +501,7 @@ def call_expert(expert_name: str, user_input: str) -> dict[str, Any]:
 {tool_context if tool_context else "Không có dữ liệu tool."}
 
 QUY TẮC BẮT BUỘC:
-1. Dữ liệu từ query_policy và các tool là nguồn sự thật ưu tiên.
-2. Không tự tạo lãi suất, DTI/LTV tối đa, ngưỡng KYC/AML, điều luật, SLA hoặc
-   cấp phê duyệt không xuất hiện trong dữ liệu tool.
-3. Khi dữ liệu tool và kiến thức tổng quát mâu thuẫn, phải dùng dữ liệu tool.
-4. Nếu kho kiến thức chưa có thông tin, ghi rõ "Chưa có thông tin trong kho kiến thức".
-5. Khi dùng RAG, ghi nguồn theo dạng: Tên file — Tên mục.
+{rag_rule}
 6. Chỉ trả lời trong phạm vi chuyên môn của {EXPERT_DISPLAY_NAMES.get(expert_name, expert_name)}.
 7. Đây là khuyến nghị hỗ trợ quyết định, không phải quyết định phê duyệt cuối cùng.
 
@@ -485,7 +512,7 @@ Hãy đưa ra ý kiến ngắn gọn, cụ thể và có căn cứ nguồn.
         text = call_fpt_model(
             system_prompt=system_prompt,
             user_message=enriched_input,
-            max_tokens=2200,
+            max_tokens=4000,
         )
     except Exception as error:
         text = f"[Lỗi khi gọi {expert_name} Expert: {error}]"
@@ -497,6 +524,7 @@ Hãy đưa ra ý kiến ngắn gọn, cụ thể và có căn cứ nguồn.
 def call_experts_parallel(
     expert_names: list[str],
     task_plan: dict[str, str],
+    use_rag: bool = True,
 ) -> dict[str, dict[str, Any]]:
     """Gọi nhiều Expert song song, mỗi Expert nhận sub-task riêng."""
     results: dict[str, dict[str, Any]] = {}
@@ -505,7 +533,9 @@ def call_experts_parallel(
         max_workers=max(len(expert_names), 1)
     ) as executor:
         future_to_expert = {
-            executor.submit(call_expert, name, task_plan.get(name, "")): name
+            executor.submit(
+                call_expert, name, task_plan.get(name, ""), use_rag
+            ): name
             for name in expert_names
         }
 
@@ -569,14 +599,15 @@ def format_final_answer(
     experts_called: list[str],
     content: str,
     tool_trace: str,
+    use_risk_check: bool = True,
 ) -> str:
     experts_str = ", ".join(
         EXPERT_DISPLAY_NAMES.get(expert, expert) for expert in experts_called
     )
     trace_line = f"🔍 Đã hỏi ý kiến: {experts_str}\n\n"
-    warning = RISK_WARNING if (
-        contains_risk(user_input) or contains_risk(content)
-    ) else ""
+    warning = ""
+    if use_risk_check and (contains_risk(user_input) or contains_risk(content)):
+        warning = RISK_WARNING
     return trace_line + tool_trace + warning + content
 
 
@@ -612,17 +643,18 @@ Yêu cầu gốc:
 Ý kiến của các Expert:
 {combined}
 
-Dữ liệu gốc từ Tool/RAG — đây là nguồn sự thật ưu tiên:
+Dữ liệu gốc từ Tool/RAG — đây là nguồn sự thật ưu tiên (có thể rỗng nếu RAG
+đang tắt cho yêu cầu này):
 {evidence}
 
 QUY TẮC TỔNG HỢP BẮT BUỘC:
 1. Không thêm con số, lãi suất, điều luật, ngưỡng KYC/AML, SLA hoặc cấp phê
-   duyệt nào không có trong dữ liệu Tool/RAG.
+   duyệt nào không có trong dữ liệu Tool/RAG (nếu có).
 2. Nếu ý kiến Expert mâu thuẫn với Tool/RAG, phải dùng Tool/RAG.
 3. Không tự giả định lãi suất hoặc kỳ hạn để tính khoản trả nợ nếu người dùng
    chưa cung cấp và tool chưa trả về.
 4. Nếu thiếu dữ liệu để kết luận, nêu rõ dữ liệu còn thiếu; không suy đoán.
-5. Giữ nguyên nguồn file và tên mục khi trích dẫn chính sách.
+5. Giữ nguyên nguồn file và tên mục khi trích dẫn chính sách (nếu có).
 6. Tổng hợp thành một khuyến nghị duy nhất, mạch lạc và ngắn gọn.
 7. Kết thúc chính xác bằng câu:
    "Khuyến nghị này cần cán bộ có thẩm quyền xem xét và phê duyệt cuối cùng."
@@ -641,7 +673,17 @@ QUY TẮC TỔNG HỢP BẮT BUỘC:
         )
 
 
-def run_orchestrator(user_input: str) -> str:
+def run_orchestrator(
+    user_input: str,
+    use_rag: bool = True,
+    use_risk_check: bool = True,
+) -> str:
+    """
+    use_rag: bật/tắt tra cứu query_policy cho mọi Expert trong lần chạy này.
+    use_risk_check: bật/tắt khối cảnh báo rủi ro ở đầu câu trả lời.
+    Cả 2 cờ chỉ ảnh hưởng đến lần gọi này, không đổi state toàn cục — an toàn
+    khi nhiều người dùng demo song song với cấu hình khác nhau.
+    """
     global LAST_RUN_LOG
 
     t_start = time_module.time()
@@ -654,7 +696,7 @@ def run_orchestrator(user_input: str) -> str:
     task_plan = planner_decompose(user_input, experts_to_call)
     t_routing = time_module.time()
 
-    expert_outputs = call_experts_parallel(experts_to_call, task_plan)
+    expert_outputs = call_experts_parallel(experts_to_call, task_plan, use_rag=use_rag)
     t_experts = time_module.time()
 
     tool_trace = format_tool_trace(expert_outputs)
@@ -675,7 +717,7 @@ def run_orchestrator(user_input: str) -> str:
 
     t_end = time_module.time()
 
-    is_risk = contains_risk(user_input) or contains_risk(content)
+    is_risk = use_risk_check and (contains_risk(user_input) or contains_risk(content))
     CASE_MEMORY.add_message("Hệ thống", content)
 
     all_tool_calls: list[dict[str, Any]] = []
@@ -699,6 +741,7 @@ def run_orchestrator(user_input: str) -> str:
             ),
             "total_sec": round(t_end - t_start, 2),
         },
+        "settings_used": {"use_rag": use_rag, "use_risk_check": use_risk_check},
     }
 
     memory_badge = (
@@ -712,6 +755,7 @@ def run_orchestrator(user_input: str) -> str:
         experts_called=list(expert_outputs.keys()),
         content=content,
         tool_trace=tool_trace,
+        use_risk_check=use_risk_check,
     )
 
 
@@ -728,5 +772,5 @@ def run_single_agent_baseline(user_input: str) -> str:
     return call_fpt_model(
         system_prompt=SINGLE_AGENT_PROMPT,
         user_message=user_input,
-        max_tokens=4000,
+        max_tokens=2000,
     )
