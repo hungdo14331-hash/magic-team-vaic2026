@@ -3,3 +3,5 @@ langchain
 langgraph
 requests
 python-dotenv
+fastapi
+uvicorn
