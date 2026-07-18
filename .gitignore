@@ -10,3 +10,7 @@ __pycache__/
 __pycache__/
 
 *.pyc
+
+.env
+
+agents/orchestrator_before_rag_fix.py
