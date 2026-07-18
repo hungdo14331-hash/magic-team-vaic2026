@@ -3,10 +3,10 @@ import streamlit as st
 import time
 from agents.orchestrator import run_orchestrator
 
-st.set_page_config(page_title="Magic Expert Agents", page_icon="🔮")
+st.set_page_config(page_title="SHB Digital Expert Agents", page_icon="🏦")
 
-st.title("🔮 Magic Expert Agents")
-st.caption("AI Co-Founder cho SME Việt Nam — VAIC 2026")
+st.title("🏦 SHB Digital Expert Agents")
+st.caption("Hội đồng chuyên gia số cho Nghiệp vụ Ngân hàng — VAIC 2026")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -15,7 +15,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-user_input = st.chat_input("Nhập câu hỏi hoặc vấn đề của bạn...")
+user_input = st.chat_input("Nhập yêu cầu nghiệp vụ (VD: thẩm định khoản vay, kiểm tra tuân thủ...)")
 
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
@@ -23,7 +23,7 @@ if user_input:
         st.write(user_input)
 
     with st.chat_message("assistant"):
-        with st.spinner("Đang phân tích và hỏi ý kiến chuyên gia..."):
+        with st.spinner("Đang phối hợp cùng đội ngũ chuyên gia..."):
             start_time = time.time()
             response = run_orchestrator(user_input)
             elapsed = time.time() - start_time
