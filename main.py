@@ -90,7 +90,8 @@ with tab_dashboard:
         st.markdown("### 🔀 Collaboration Flow")
         
         flow_text = "**Planner (Fast Routing)** → "
-        flow_text += " + ".join([f"**{e.capitalize()} Expert**" for e in log["experts_called"]])
+        name_map = {"credit": "Credit Expert", "legal": "Legal & Compliance Expert", "product": "Product Expert", "operations": "Operations Expert"}
+        flow_text += " + ".join([f"**{name_map.get(e, e)}**" for e in log["experts_called"]])
         if log["synthesis_used"]:
             flow_text += " → **Synthesis Agent** → Kết quả cuối"
         else:
@@ -119,18 +120,24 @@ with tab_dashboard:
 
         st.divider()
         st.markdown("### 🔧 Task Status — Tool Calls")
-        if log["tool_calls"]:
-            for call in log["tool_calls"]:
-                st.markdown(f"- **{call['expert'].capitalize()} Expert** gọi `{call['tool']}({call['args']})` → `{call['result']}`")
-        else:
-            st.markdown("_Không có tool nào được gọi cho yêu cầu này._")
+if log["tool_calls"]:
+    name_map = {"credit": "Credit Expert", "legal": "Legal & Compliance Expert", "product": "Product Expert", "operations": "Operations Expert"}
+    for call in log["tool_calls"]:
+        summary = orchestrator_module._summarize_tool_result(call)
+        cache_note = " [cache]" if call.get("from_cache") else ""
+        st.markdown(f"- **{name_map.get(call['expert'], call['expert'])}** gọi `{call['tool']}({call['args']})`{cache_note} → {summary}")
+else:
+    st.markdown("_Không có tool nào được gọi cho yêu cầu này._")
 
-        st.divider()
-        st.markdown("### ⏱️ Timing Breakdown")
-        t = log["timings"]
-        st.markdown(f"""
-        - Routing (chọn Expert): **{t['routing_sec']}s**
-        - Gọi Expert song song (+ tool): **{t['experts_sec']}s**
-        - Synthesis (tổng hợp): **{t['synthesis_sec']}s**
-        - **Tổng thời gian: {t['total_sec']}s**
-        """)
+    st.divider()
+    st.markdown("### ⏱️ Timing Breakdown")
+    t = log["timings"]
+    if t and "routing_sec" in t:
+            st.markdown(f"""
+            - Routing (chọn Expert): **{t['routing_sec']}s**
+            - Gọi Expert song song (+ tool): **{t['experts_sec']}s**
+            - Synthesis (tổng hợp): **{t['synthesis_sec']}s**
+            - **Tổng thời gian: {t['total_sec']}s**
+            """)
+    else:
+            st.info("Đang xử lý yêu cầu khác, timing sẽ hiện khi hoàn tất.")

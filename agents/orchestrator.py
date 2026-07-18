@@ -632,7 +632,7 @@ QUY TẮC TỔNG HỢP BẮT BUỘC:
         return call_fpt_model(
             system_prompt=ORCHESTRATOR_PROMPT,
             user_message=synthesis_prompt,
-            max_tokens=3500,
+            max_tokens=5000,
         )
     except Exception as error:
         return (
