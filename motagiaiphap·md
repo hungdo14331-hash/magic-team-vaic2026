@@ -1,0 +1,129 @@
+# SHB Digital Expert Agents — Mô tả giải pháp
+
+**Đội thi:** Magic Team
+**Cuộc thi:** Vietnam AI Innovation Challenge (VAIC) 2026
+**Đề bài:** SHB Digital Expert Agents — Hệ đa tác tử (multi-agent) cho nghiệp vụ ngân hàng
+
+---
+
+## 1. Vấn đề
+
+Cán bộ tín dụng và vận hành tại ngân hàng phải xử lý các yêu cầu nghiệp vụ trải rộng
+nhiều lĩnh vực cùng lúc: một hồ sơ vay không chỉ cần thẩm định tín dụng, mà còn phải
+kiểm tra tuân thủ pháp lý, đối chiếu sản phẩm phù hợp, và tuân theo đúng quy trình phê
+duyệt. Một chatbot đơn (single-agent) trả lời chung chung, không có căn cứ số liệu thật,
+không trích dẫn được quy định nội bộ, và quan trọng nhất với ngành ngân hàng — **không
+truy vết được vì sao ra quyết định đó**.
+
+Trong môi trường ngân hàng, một quyết định sai có chi phí cao hơn nhiều so với vài giây
+chờ đợi. Điều cần thiết không phải là câu trả lời nhanh, mà là câu trả lời **có căn cứ,
+minh bạch, và kiểm toán được**.
+
+## 2. Giải pháp tổng quan
+
+SHB Digital Expert Agents là một **hội đồng chuyên gia số** gồm 4 chuyên gia AI chuyên biệt,
+phối hợp dưới sự điều phối của một Orchestrator, để xử lý mỗi yêu cầu nghiệp vụ theo đúng
+cách một hội đồng thẩm định thật vận hành:
+
+- **Credit Expert** — thẩm định tín dụng, tính DTI, tra cứu điểm CIC và hồ sơ khách hàng
+- **Legal & Compliance Expert** — kiểm tra tuân thủ KYC/AML và quy định pháp lý
+- **Product Expert** — tư vấn sản phẩm vay, tiết kiệm, thẻ phù hợp
+- **Operations Expert** — hướng dẫn quy trình phê duyệt, SLA, tạo phiếu trình
+
+Mỗi yêu cầu đi qua một pipeline rõ ràng: **Fast Routing → Planner phân rã task →
+các Expert chạy song song (mỗi Expert tự gọi tool + RAG) → Synthesis tổng hợp →
+kiểm tra rủi ro → khuyến nghị cuối cùng có trích dẫn nguồn**.
+
+## 3. Điểm khác biệt (Novelty)
+
+### 3.1. Fast keyword routing — né một lần gọi LLM
+Hầu hết hệ multi-agent tốn thêm một lần gọi LLM chỉ để "chọn agent nào xử lý". Hệ thống
+này dùng keyword matching để định tuyến tức thì (dưới 0.1 giây, không tốn token), chỉ gọi
+LLM cho phần thực sự cần suy luận. Điều này giảm cả chi phí lẫn độ trễ — đo được trực tiếp
+trong Timing Breakdown trên Dashboard.
+
+### 3.2. RAG theo từng domain chuyên biệt
+Mỗi Expert tra cứu đúng kho kiến thức riêng của mình (Credit tra chính sách tín dụng,
+Legal tra quy định tuân thủ...), thay vì dùng chung một vector store. Điều này đảm bảo mỗi
+khuyến nghị được căn cứ trên đúng nguồn chuyên môn, và mọi trích dẫn đều ghi rõ nguồn theo
+định dạng "Tên file — Tên mục" để kiểm toán.
+
+### 3.3. Toggle RAG và Risk Check thật — theo từng request
+Giao diện cho phép bật/tắt RAG và Cảnh báo rủi ro ngay trong lúc demo. Đây không phải hiệu
+ứng hiển thị: khi tắt RAG, backend thực sự bỏ qua bước tra cứu và Expert được yêu cầu ghi
+rõ "câu trả lời này không tra cứu quy định nội bộ". Điều này biến phần "so sánh có/không RAG"
+từ lời nói thành **thao tác trực tiếp mà giám khảo tự kiểm chứng được**. Hai cờ này gửi kèm
+theo từng request (không phải state toàn cục), nên nhiều người dùng có thể demo song song
+với cấu hình khác nhau mà không ảnh hưởng lẫn nhau.
+
+### 3.4. Case Memory — tự trích xuất dữ kiện và cache
+Hệ thống tự động trích xuất các dữ kiện số học (số tiền vay, thu nhập) từ câu hỏi tiếng Việt
+tự nhiên, ghi nhớ hồ sơ khách hàng đang xử lý xuyên suốt phiên, và cache kết quả tool để
+tránh gọi lại tốn kém. Cán bộ có thể hỏi tiếp mà không cần nhắc lại thông tin.
+
+### 3.5. Agent Trace Dashboard — minh bạch và kiểm toán được
+Toàn bộ quá trình xử lý được ghi lại và hiển thị trực quan: Collaboration Flow (Planner →
+các Expert → Synthesis), Task Decomposition (Planner đã giao việc gì cho ai), Case Memory
+state, danh sách Tool Calls kèm kết quả, và Timing Breakdown. Đây chính là yêu cầu cốt lõi
+của ngành ngân hàng — nơi mọi quyết định phải truy vết được về nguồn gốc.
+
+### 3.6. So sánh Multi-Agent vs Single-Agent trực tiếp
+Chế độ so sánh chạy cùng một câu hỏi qua cả hai kiến trúc, hiển thị song song, để thấy rõ
+sự khác biệt: Single-Agent trả lời chung chung không căn cứ; Multi-Agent có số liệu thật
+(DTI tính toán, điểm CIC), trích dẫn quy định, cảnh báo rủi ro tự động, và truy vết được.
+
+## 4. Kiến trúc kỹ thuật
+
+### 4.1. Pipeline xử lý (Orchestrator)
+```
+Yêu cầu người dùng
+   │
+   ├─ Fast Routing (keyword) ──► chọn Expert liên quan (không gọi LLM)
+   │
+   ├─ Planner ──► phân rã thành sub-task riêng cho từng Expert (1 lần gọi LLM)
+   │
+   ├─ Các Expert chạy SONG SONG (ThreadPoolExecutor):
+   │     mỗi Expert: Case Memory context → quyết định tool → gọi tool + RAG
+   │                 → sinh khuyến nghị có căn cứ nguồn
+   │
+   ├─ Synthesis Agent ──► tổng hợp thành 1 khuyến nghị mạch lạc
+   │                       (bỏ qua nếu chỉ 1 Expert được gọi)
+   │
+   ├─ Risk Check ──► gắn cảnh báo nếu phát hiện từ khóa rủi ro cao
+   │
+   └─ Khuyến nghị cuối + trích dẫn nguồn + ghi log vào Agent Trace
+```
+
+### 4.2. Tool Layer (Function Calling)
+5 công cụ mô phỏng API ngân hàng thật:
+- `check_credit_score(customer_id)` — tra điểm CIC và nhóm nợ
+- `query_customer_profile(customer_id)` — tra thu nhập, dư nợ, thâm niên
+- `calculate_loan_eligibility(income, existing_debt, new_payment)` — tính DTI và kết luận
+- `query_policy(topic, expert_name, top_k)` — RAG tra cứu quy định nội bộ theo domain
+- `create_approval_ticket(customer_id, decision, reason)` — tạo phiếu trình phê duyệt
+
+Việc gọi tool tuân theo luật ổn định (rule-based), đảm bảo tool được gọi đúng lúc mà không
+phụ thuộc vào việc model có trả đúng định dạng JSON hay không — tăng độ tin cậy cho demo.
+
+### 4.3. Công nghệ
+- **Backend:** Python, FastAPI (REST API), gọi mô hình qua FPT AI Factory
+- **Frontend:** Next.js 15 (App Router), TypeScript, Tailwind CSS, Framer Motion, Lucide
+- **State:** React Context + localStorage (giữ tiến trình qua chuyển tab và tải lại trang)
+- **Triển khai:** Backend trên Render (Streamlit + FastAPI song song), Frontend trên Vercel
+
+## 5. Tác động đo lường được
+
+- **Giảm chi phí LLM:** Fast routing loại bỏ một lần gọi LLM cho mỗi yêu cầu so với cách
+  dùng LLM để định tuyến.
+- **Chạy song song:** Các Expert xử lý đồng thời thay vì tuần tự, giảm tổng thời gian.
+- **Minh bạch:** Mọi quyết định truy vết được về nguồn — điều kiện bắt buộc để một hệ AI
+  được chấp nhận trong môi trường ngân hàng thực tế.
+- **Kiểm chứng trực tiếp:** Giám khảo tự bật/tắt RAG để thấy khác biệt, thay vì phải tin lời.
+
+## 6. Giới hạn và hướng phát triển
+
+Hệ thống hiện dùng dữ liệu khách hàng và quy định mô phỏng (mock) vì không có quyền truy cập
+hệ thống SHB thật. Kiến trúc được thiết kế để khi có quyền truy cập, chỉ cần thay lớp tool
+mock bằng API thật mà không phải viết lại logic điều phối. Hướng phát triển tiếp theo bao gồm
+tích hợp dữ liệu ngân hàng thật, mở rộng kho kiến thức RAG, và bổ sung các hành động thực thi
+trong quy trình vận hành.
